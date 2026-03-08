@@ -11,7 +11,7 @@ export default defineConfig({
       includeAssets: ['favicon.svg'],
       manifest: {
         name: 'Fabris Thee Luo Poet',
-        short_name: 'Fabris',
+        short_name: 'FTLP',
         start_url: '/',
         scope: '/',
         display: 'standalone',

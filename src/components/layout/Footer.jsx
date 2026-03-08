@@ -2,21 +2,10 @@ import { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 
 export default function Footer() {
-  const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [iconClicks, setIconClicks] = useState(0);
   const navigate = useNavigate();
   const location = useLocation();
-  const isPublicPage = !location.pathname.startsWith('/dashboard');
-
-  useEffect(() => {
-    const handler = (e) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-    };
-
-    window.addEventListener("beforeinstallprompt", handler);
-    return () => window.removeEventListener("beforeinstallprompt", handler);
-  }, []);
+  const isPublicPage = !location.pathname.startsWith("/dashboard");
 
   // Reset icon clicks after 3 seconds of inactivity
   useEffect(() => {
@@ -38,28 +27,18 @@ export default function Footer() {
     }
   };
 
-  const installApp = async () => {
-    if (!deferredPrompt) return;
-    deferredPrompt.prompt();
-    await deferredPrompt.userChoice;
-    setDeferredPrompt(null);
-  };
-
   return (
     <footer className="footer">
-      {deferredPrompt && (
-        <button onClick={installApp}>Install App</button>
-      )}
-      <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+      <div style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
         <div>© Fabris Thee Luo Poet</div>
         {isPublicPage && (
-          <div 
+          <div
             onClick={handleIconClick}
-            style={{ 
-              cursor: 'inherit', 
-              fontSize: '16px', 
-              userSelect: 'none',
-              opacity: 0.6
+            style={{
+              cursor: "inherit",
+              fontSize: "16px",
+              userSelect: "none",
+              opacity: 0.6,
             }}
           >
             🔒

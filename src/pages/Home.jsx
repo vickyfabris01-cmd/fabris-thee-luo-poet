@@ -17,6 +17,7 @@ export default function Home() {
   const [videoThumbError, setVideoThumbError] = useState(false);
   const [profilePhoto, setProfilePhoto] = useState(null);
   const [loadingProfilePhoto, setLoadingProfilePhoto] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
 
   const featuredPoem = (poems && poems[0]) || null;
   const featuredVideo = (videos && videos[0]) || null;
@@ -42,6 +43,24 @@ export default function Home() {
       fetchProfilePhoto();
     }
   }, [user?.id]);
+
+  // PWA install prompt
+  useEffect(() => {
+    const handler = (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+
+    window.addEventListener("beforeinstallprompt", handler);
+    return () => window.removeEventListener("beforeinstallprompt", handler);
+  }, []);
+
+  const installApp = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    await deferredPrompt.userChoice;
+    setDeferredPrompt(null);
+  };
 
   return (
     <div className="page">
@@ -162,6 +181,25 @@ export default function Home() {
           </div>
         )}
       </section>
+
+      {/* PWA Install Button */}
+      {deferredPrompt && (
+        <div
+          style={{
+            textAlign: "center",
+            marginTop: "2rem",
+            marginBottom: "1rem",
+          }}
+        >
+          <button
+            onClick={installApp}
+            className="btn-primary"
+            style={{ maxWidth: "300px" }}
+          >
+            Install App
+          </button>
+        </div>
+      )}
     </div>
   );
 }
