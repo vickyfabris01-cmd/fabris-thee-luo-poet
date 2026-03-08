@@ -33,7 +33,6 @@ export default function PoemPage() {
     found: !!poem,
   });
 
-  const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ body: "" });
   const [touchStart, setTouchStart] = useState(null);
   const [touchEnd, setTouchEnd] = useState(null);
@@ -41,7 +40,7 @@ export default function PoemPage() {
   const [transitionDirection, setTransitionDirection] = useState(null);
   const [likes, setLikes] = useState(0);
   const [liked, setLiked] = useState(false);
-  const [showComments, setShowComments] = useState(true);
+  const [showComments, setShowComments] = useState(false);
   // Reset transition state when id changes
   useEffect(() => {
     setIsTransitioning(false);
@@ -277,7 +276,6 @@ export default function PoemPage() {
             }}
             onToggleComments={() => {
               setShowComments(!showComments);
-              setShowForm(!showForm);
             }}
           />
           <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
@@ -297,101 +295,166 @@ export default function PoemPage() {
                   const body = latest.message || latest.body || "";
                   const date = formatDateTime(latest.created_at || latest.date);
                   return (
-                    <div key={latest.id} className="card">
+                    <div
+                      key={latest.id}
+                      style={{
+                        padding: "12px",
+                        background: "var(--bg-secondary)",
+                        borderRadius: "8px",
+                        marginTop: "8px",
+                        border: "1px solid var(--border)",
+                      }}
+                    >
+                      <div style={{ fontWeight: "bold", fontSize: "14px" }}>
+                        {name}
+                      </div>
+                      <div style={{ marginTop: "4px", fontSize: "14px" }}>
+                        {body}
+                      </div>
                       <div
                         style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "flex-start",
+                          color: "var(--muted)",
+                          fontSize: "12px",
+                          marginTop: "4px",
                         }}
                       >
-                        <div>
-                          <strong>{name}</strong>
-                          <div style={{ color: "var(--muted)", fontSize: 12 }}>
-                            {date}
-                          </div>
-                        </div>
-                        <CommentLikeButton
-                          commentId={latest.id}
-                          initialLiked={latest.like || false}
-                          initialLikes={latest.like_count || 0}
-                        />
+                        {date}
                       </div>
-                      <div style={{ marginTop: 8 }}>{body}</div>
                     </div>
                   );
                 })()}
               </div>
             )}
-            {showComments &&
-              reflectionsFor(id)
-                .filter(
-                  (r) =>
-                    r.id !==
-                    reflectionsFor(id)[reflectionsFor(id).length - 1].id,
-                )
-                .map((r) => {
-                  const name = r.is_anonymous
-                    ? "Anonymous"
-                    : r.sender_name || r.name || "Guest";
-                  const body = r.message || r.body || "";
-                  const date = formatDateTime(r.created_at || r.date);
-                  return (
-                    <div key={r.id} className="card">
+            {showComments && (
+              <div>
+                {/* All comments from oldest to newest */}
+                {reflectionsFor(id)
+                  .sort(
+                    (a, b) =>
+                      new Date(a.created_at || a.date) -
+                      new Date(b.created_at || b.date),
+                  )
+                  .map((r) => {
+                    const name = r.is_anonymous
+                      ? "Anonymous"
+                      : r.sender_name || r.name || "Guest";
+                    const body = r.message || r.body || "";
+                    const date = formatDateTime(r.created_at || r.date);
+                    return (
                       <div
+                        key={r.id}
+                        className="card"
+                        style={{ marginBottom: "12px" }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "flex-start",
+                          }}
+                        >
+                          <div>
+                            <strong>{name}</strong>
+                            <div
+                              style={{ color: "var(--muted)", fontSize: 12 }}
+                            >
+                              {date}
+                            </div>
+                          </div>
+                          <CommentLikeButton
+                            commentId={r.id}
+                            initialLiked={r.like || false}
+                            initialLikes={r.like_count || 0}
+                          />
+                        </div>
+                        <div style={{ marginTop: 8 }}>{body}</div>
+                      </div>
+                    );
+                  })}
+
+                {/* Comment input area */}
+                <div
+                  style={{
+                    marginTop: "16px",
+                    padding: "12px",
+                    background: "var(--bg-secondary)",
+                    borderRadius: "8px",
+                    border: "1px solid var(--border)",
+                  }}
+                >
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      addReflection(id, form);
+                      setForm({ body: "" }); // Clear form after submit
+                    }}
+                    style={{
+                      display: "flex",
+                      alignItems: "flex-end",
+                      gap: "8px",
+                    }}
+                  >
+                    <textarea
+                      value={form.body}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, body: e.target.value }))
+                      }
+                      placeholder="Write a comment..."
+                      style={{
+                        flex: 1,
+                        minHeight: "36px",
+                        maxHeight: "120px",
+                        padding: "8px 12px",
+                        border: "1px solid var(--border)",
+                        borderRadius: "18px",
+                        background: "var(--bg)",
+                        color: "var(--text)",
+                        fontSize: "14px",
+                        resize: "none",
+                        outline: "none",
+                        lineHeight: "1.4",
+                      }}
+                      onInput={(e) => {
+                        e.target.style.height = "auto";
+                        e.target.style.height =
+                          Math.min(e.target.scrollHeight, 120) + "px";
+                      }}
+                    />
+                    <button
+                      type="submit"
+                      style={{
+                        padding: "6px",
+                        borderRadius: "12px",
+                        fontSize: "12px",
+                        whiteSpace: "nowrap",
+                        minHeight: "28px",
+                        minWidth: "28px",
+                        lineHeight: "1",
+                        alignSelf: "flex-end",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        background: "transparent",
+                        border: "none",
+                        color: "var(--text)",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 640 640"
                         style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "flex-start",
+                          width: "20px",
+                          height: "20px",
+                          fill: "currentColor",
                         }}
                       >
-                        <div>
-                          <strong>{name}</strong>
-                          <div style={{ color: "var(--muted)", fontSize: 12 }}>
-                            {date}
-                          </div>
-                        </div>
-                        <CommentLikeButton
-                          commentId={r.id}
-                          initialLiked={r.like || false}
-                          initialLikes={r.like_count || 0}
-                        />
-                      </div>
-                      <div style={{ marginTop: 8 }}>{body}</div>
-                    </div>
-                  );
-                })}
-
-            {showForm && (
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  addReflection(id, form);
-                }}
-                style={{ marginTop: 10, display: "grid", gap: 8 }}
-              >
-                <label>
-                  Comment
-                  <textarea
-                    value={form.body}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, body: e.target.value }))
-                    }
-                  />
-                </label>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button type="submit" className="btn-primary">
-                    Submit
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowForm(false)}
-                    style={{ padding: "10px 12px", borderRadius: 8 }}
-                  >
-                    Cancel
-                  </button>
+                        <path d="M568.4 37.7C578.2 34.2 589 36.7 596.4 44C603.8 51.3 606.2 62.2 602.7 72L424.7 568.9C419.7 582.8 406.6 592 391.9 592C377.7 592 364.9 583.4 359.6 570.3L295.4 412.3C290.9 401.3 292.9 388.7 300.6 379.7L395.1 267.3C400.2 261.2 399.8 252.3 394.2 246.7C388.6 241.1 379.6 240.7 373.6 245.8L261.2 340.1C252.1 347.7 239.6 349.7 228.6 345.3L70.1 280.8C57 275.5 48.4 262.7 48.4 248.5C48.4 233.8 57.6 220.7 71.5 215.7L568.4 37.7z" />
+                      </svg>
+                    </button>
+                  </form>
                 </div>
-              </form>
+              </div>
             )}
           </div>
         </section>
