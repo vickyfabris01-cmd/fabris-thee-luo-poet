@@ -449,9 +449,10 @@ export default function Video() {
               setLiked(!liked);
               setLikes(liked ? likes - 1 : likes + 1);
             }}
-            onToggleComments={() => {
-              setShowComments(!showComments);
+            onToggleComments={(showComments) => {
+              setShowComments(showComments);
             }}
+            showComments={showComments}
           />
           <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
             {reflectionsFor(id).length === 0 && (
@@ -546,96 +547,88 @@ export default function Video() {
                       </div>
                     );
                   })}
-
-                {/* Comment input area */}
-                <div
-                  style={{
-                    marginTop: "16px",
-                    padding: "12px",
-                    background: "var(--bg-secondary)",
-                    borderRadius: "8px",
-                    border: "1px solid var(--border)",
-                  }}
-                >
-                  <form
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      addReflection(id, reflectionForm);
-                      setReflectionForm({ message: "" }); // Clear form after submit
-                    }}
-                    style={{
-                      position: "relative",
-                      display: "flex",
-                      alignItems: "flex-end",
-                      gap: "8px",
-                    }}
-                  >
-                    <textarea
-                      value={reflectionForm.message}
-                      onChange={(e) =>
-                        setReflectionForm((f) => ({
-                          ...f,
-                          message: e.target.value,
-                        }))
-                      }
-                      placeholder="Write a comment..."
-                      style={{
-                        flex: 1,
-                        minHeight: "36px",
-                        maxHeight: "120px",
-                        padding: "8px 12px",
-                        border: "1px solid var(--border)",
-                        borderRadius: "18px",
-                        background: "var(--bg)",
-                        color: "var(--text)",
-                        fontSize: "14px",
-                        resize: "none",
-                        outline: "none",
-                        lineHeight: "1.4",
-                      }}
-                      onInput={(e) => {
-                        e.target.style.height = "auto";
-                        e.target.style.height =
-                          Math.min(e.target.scrollHeight, 120) + "px";
-                      }}
-                    />
-                    <button
-                      type="submit"
-                      style={{
-                        alignSelf: "flex-end",
-                        padding: "6px",
-                        borderRadius: "12px",
-                        fontSize: "11px",
-                        whiteSpace: "nowrap",
-                        minHeight: "28px",
-                        minWidth: "28px",
-                        lineHeight: "1",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        background: "transparent",
-                        border: "none",
-                        color: "var(--text)",
-                        cursor: "pointer",
-                      }}
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        viewBox="0 0 640 640"
-                        style={{
-                          width: "20px",
-                          height: "20px",
-                          fill: "currentColor",
-                        }}
-                      >
-                        <path d="M568.4 37.7C578.2 34.2 589 36.7 596.4 44C603.8 51.3 606.2 62.2 602.7 72L424.7 568.9C419.7 582.8 406.6 592 391.9 592C377.7 592 364.9 583.4 359.6 570.3L295.4 412.3C290.9 401.3 292.9 388.7 300.6 379.7L395.1 267.3C400.2 261.2 399.8 252.3 394.2 246.7C388.6 241.1 379.6 240.7 373.6 245.8L261.2 340.1C252.1 347.7 239.6 349.7 228.6 345.3L70.1 280.8C57 275.5 48.4 262.7 48.4 248.5C48.4 233.8 57.6 220.7 71.5 215.7L568.4 37.7z" />
-                      </svg>
-                    </button>
-                  </form>
-                </div>
               </div>
             )}
           </div>
+
+          {showComments && (
+            <div style={{ marginTop: "24px" }}>
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  addReflection(id, reflectionForm);
+                  setReflectionForm({ message: "" });
+                }}
+                style={{
+                  display: "flex",
+                  alignItems: "flex-end",
+                  gap: "8px",
+                }}
+              >
+                <textarea
+                  value={reflectionForm.message}
+                  onChange={(e) =>
+                    setReflectionForm((f) => ({
+                      ...f,
+                      message: e.target.value,
+                    }))
+                  }
+                  placeholder="Write a comment..."
+                  style={{
+                    flex: 1,
+                    minHeight: "36px",
+                    maxHeight: "120px",
+                    padding: "8px 12px",
+                    border: "1px solid var(--border)",
+                    borderRadius: "18px",
+                    background: "var(--bg)",
+                    color: "var(--text)",
+                    fontSize: "14px",
+                    resize: "none",
+                    outline: "none",
+                    lineHeight: "1.4",
+                  }}
+                  onInput={(e) => {
+                    e.target.style.height = "auto";
+                    e.target.style.height =
+                      Math.min(e.target.scrollHeight, 120) + "px";
+                  }}
+                />
+                <button
+                  type="submit"
+                  style={{
+                    padding: "6px",
+                    borderRadius: "12px",
+                    fontSize: "11px",
+                    whiteSpace: "nowrap",
+                    minHeight: "28px",
+                    minWidth: "28px",
+                    lineHeight: "1",
+                    alignSelf: "flex-end",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    background: "transparent",
+                    border: "none",
+                    color: "var(--text)",
+                    cursor: "pointer",
+                  }}
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 640 640"
+                    style={{
+                      width: "20px",
+                      height: "20px",
+                      fill: "currentColor",
+                    }}
+                  >
+                    <path d="M568.4 37.7C578.2 34.2 589 36.7 596.4 44C603.8 51.3 606.2 62.2 602.7 72L424.7 568.9C419.7 582.8 406.6 592 391.9 592C377.7 592 364.9 583.4 359.6 570.3L295.4 412.3C290.9 401.3 292.9 388.7 300.6 379.7L395.1 267.3C400.2 261.2 399.8 252.3 394.2 246.7C388.6 241.1 379.6 240.7 373.6 245.8L261.2 340.1C252.1 347.7 239.6 349.7 228.6 345.3L70.1 280.8C57 275.5 48.4 262.7 48.4 248.5C48.4 233.8 57.6 220.7 71.5 215.7L568.4 37.7z" />
+                  </svg>
+                </button>
+              </form>
+            </div>
+          )}
         </div>
       </div>
     </div>

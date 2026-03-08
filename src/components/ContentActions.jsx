@@ -9,7 +9,6 @@ export default function ContentActions({
   onLike,
   onToggleComments,
   showComments = false,
-  showForm = false,
 }) {
   const [liked, setLiked] = useState(false);
   const [likes, setLikes] = useState(initialLikes);
@@ -31,7 +30,7 @@ export default function ContentActions({
 
   const handleCommentToggle = () => {
     if (onToggleComments) {
-      onToggleComments(!showComments, !showForm);
+      onToggleComments(!showComments);
     }
   };
 
@@ -58,7 +57,7 @@ export default function ContentActions({
             alignItems: "center",
             gap: "6px",
             color: liked ? "white" : "var(--text)",
-            fontSize: "14px",
+            fontSize: "11px",
           }}
         >
           <svg
@@ -117,6 +116,7 @@ export default function ContentActions({
           Invite
         </Link>
       </div>
+
       <h3>Comments</h3>
     </>
   );
