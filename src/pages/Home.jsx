@@ -64,14 +64,6 @@ export default function Home() {
 
   return (
     <div className="page">
-      <section className="intro">
-        <IdentityMark />
-
-        <p>
-          A mobile-first poetry & media space — public art, private control.
-        </p>
-      </section>
-
       {/* Show Live first if active */}
       {liveActive && (
         <section

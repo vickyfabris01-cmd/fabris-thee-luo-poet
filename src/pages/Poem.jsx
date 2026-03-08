@@ -234,7 +234,7 @@ export default function PoemPage() {
                 setLikes(liked ? likes - 1 : likes + 1);
               }}
               style={{
-                background: liked ? "var(--accent)" : "#f0f0f0",
+                background: liked ? "var(--accent)" : "var(--bg-secondary)",
                 border: "none",
                 cursor: "pointer",
                 padding: "8px 12px",
@@ -263,7 +263,7 @@ export default function PoemPage() {
                 setShowForm(!showForm);
               }}
               style={{
-                background: "#f0f0f0",
+                background: "var(--bg-secondary)",
                 border: "none",
                 cursor: "pointer",
                 padding: "8px 12px",
@@ -289,7 +289,7 @@ export default function PoemPage() {
             <Link
               to="/invite"
               style={{
-                background: "#f0f0f0",
+                background: "var(--bg-secondary)",
                 border: "none",
                 cursor: "pointer",
                 padding: "8px 12px",

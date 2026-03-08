@@ -410,7 +410,7 @@ export default function Video() {
                 setLikes(liked ? likes - 1 : likes + 1);
               }}
               style={{
-                background: liked ? "var(--accent)" : "#f0f0f0",
+                background: liked ? "var(--accent)" : "var(--bg-secondary)",
                 border: "none",
                 cursor: "pointer",
                 padding: "8px 12px",
@@ -439,7 +439,7 @@ export default function Video() {
                 setShowReflectionForm(!showReflectionForm);
               }}
               style={{
-                background: "#f0f0f0",
+                background: "var(--bg-secondary)",
                 border: "none",
                 cursor: "pointer",
                 padding: "8px 12px",
@@ -465,7 +465,7 @@ export default function Video() {
             <Link
               to="/invite"
               style={{
-                background: "#f0f0f0",
+                background: "var(--bg-secondary)",
                 border: "none",
                 cursor: "pointer",
                 padding: "8px 12px",

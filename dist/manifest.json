@@ -20,21 +20,7 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
-    },
-    {
-      "src": "/FLP.jpeg",
-      "sizes": "any",
-      "type": "image/jpeg",
-      "purpose": "any"
     }
   ],
-  "categories": ["lifestyle", "productivity"],
-  "screenshots": [
-    {
-      "src": "/FLP.jpeg",
-      "sizes": "540x720",
-      "type": "image/jpeg",
-      "form_factor": "narrow"
-    }
-  ]
+  "categories": ["lifestyle", "productivity"]
 }

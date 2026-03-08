@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
+import IdentityMark from "../IdentityMark";
 
 export default function Footer() {
   const [iconClicks, setIconClicks] = useState(0);
   const navigate = useNavigate();
   const location = useLocation();
   const isPublicPage = !location.pathname.startsWith("/dashboard");
+  const isHomePage = location.pathname === "/" || location.pathname === "/home";
 
   // Reset icon clicks after 3 seconds of inactivity
   useEffect(() => {
@@ -28,23 +30,34 @@ export default function Footer() {
   };
 
   return (
-    <footer className="footer">
-      <div style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
-        <div>© Fabris Thee Luo Poet</div>
-        {isPublicPage && (
-          <div
-            onClick={handleIconClick}
-            style={{
-              cursor: "inherit",
-              fontSize: "16px",
-              userSelect: "none",
-              opacity: 0.6,
-            }}
-          >
-            🔒
-          </div>
-        )}
-      </div>
-    </footer>
+    <>
+      {isHomePage && (
+        <section className="intro">
+          <IdentityMark />
+
+          <p>
+            A mobile-first poetry & media space — public art, private control.
+          </p>
+        </section>
+      )}
+      <footer className="footer">
+        <div style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
+          <div>© Fabris Thee Luo Poet</div>
+          {isPublicPage && (
+            <div
+              onClick={handleIconClick}
+              style={{
+                cursor: "inherit",
+                fontSize: "16px",
+                userSelect: "none",
+                opacity: 0.6,
+              }}
+            >
+              🔒
+            </div>
+          )}
+        </div>
+      </footer>
+    </>
   );
 }
