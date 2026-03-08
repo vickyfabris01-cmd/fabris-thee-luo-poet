@@ -14,22 +14,16 @@ export default function Home() {
     useSupabaseQuery("videos");
   const { data: liveSettings = [], loading: loadingLive } =
     useSupabaseQuery("live_settings");
-  const [videoThumbError, setVideoThumbError] = useState(false);
   const [profilePhoto, setProfilePhoto] = useState(null);
   const [loadingProfilePhoto, setLoadingProfilePhoto] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState(null);
 
   const featuredPoem = (poems && poems[0]) || null;
-  const featuredVideo = (videos && videos[0]) || null;
+  const featuredVideos = (videos && videos.slice(0, 2)) || [];
   const liveActive =
     (liveSettings && liveSettings[0] && liveSettings[0].enabled) || false;
 
   const isLoading = loadingPoems || loadingVideos || loadingLive;
-  const videoThumb = videoThumbError
-    ? "/FLP.jpeg"
-    : getYouTubeThumb(
-        featuredVideo?.youtubeId || featuredVideo?.youtube_url || "",
-      ) || "/FLP.jpeg";
 
   // Fetch active profile photo
   useEffect(() => {
@@ -106,7 +100,7 @@ export default function Home() {
         </h4>
         {isLoading ? (
           <Loader size="small" message="Loading featured content..." />
-        ) : !featuredPoem && !featuredVideo ? (
+        ) : !featuredPoem && featuredVideos.length === 0 ? (
           <div style={{ paddingTop: 8, color: "var(--muted)" }}>
             No featured items yet. Add content in the dashboard.
           </div>
@@ -115,59 +109,77 @@ export default function Home() {
             {/* Featured Poem */}
             {featuredPoem && (
               <div>
-                <h5
-                  style={{
-                    margin: "0 0 8px 0",
-                    fontSize: "14px",
-                    color: "var(--muted)",
-                  }}
-                >
-                  Poem
-                </h5>
                 <h3 style={{ margin: "6px 0 4px" }}>
                   {trimToWords(featuredPoem.title)}
                 </h3>
                 <p style={{ color: "var(--muted)", marginBottom: 12 }}>
                   {featuredPoem.body.split("\n").slice(0, 2).join(" ")}
                 </p>
-                <Link to={`/poems/${featuredPoem.id}`} className="btn-primary">
-                  Read
+                <Link to="/poems" className="btn-primary">
+                  View
                 </Link>
               </div>
             )}
 
-            {/* Featured Video */}
-            {featuredVideo && (
+            {/* Featured Videos */}
+            {featuredVideos.length > 0 && (
               <div>
-                <h5
-                  style={{
-                    margin: "0 0 8px 0",
-                    fontSize: "14px",
-                    color: "var(--muted)",
-                  }}
-                >
-                  Video
-                </h5>
                 <div
                   style={{
-                    borderRadius: 8,
-                    overflow: "hidden",
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: 8,
                     marginBottom: 12,
                   }}
                 >
-                  <img
-                    src={videoThumb}
-                    alt={featuredVideo.title}
-                    onError={() => setVideoThumbError(true)}
-                    style={{ width: "100%", height: "auto" }}
-                  />
+                  {featuredVideos.map((video, index) => (
+                    <div
+                      key={video.id}
+                      style={{
+                        borderRadius: 8,
+                        overflow: "hidden",
+                        cursor: "pointer",
+                      }}
+                      onClick={() => (window.location.href = "/videos")}
+                    >
+                      <img
+                        src={
+                          getYouTubeThumb(
+                            video.youtubeId || video.youtube_url || "",
+                          ) || "/FLP.jpeg"
+                        }
+                        alt={video.title}
+                        style={{
+                          width: "100%",
+                          height: "120px",
+                          objectFit: "cover",
+                        }}
+                        onError={(e) => (e.target.src = "/FLP.jpeg")}
+                      />
+                    </div>
+                  ))}
                 </div>
-                <h3 style={{ margin: "6px 0 4px" }}>
-                  {trimToWords(featuredVideo.title)}
-                </h3>
-                <Link to="/videos" className="btn-primary">
-                  Watch
-                </Link>
+              </div>
+            )}
+
+            {/* Live Active */}
+            {liveActive && (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  cursor: "pointer",
+                  padding: "12px",
+                  borderRadius: 8,
+                  background: "var(--bg-secondary)",
+                }}
+                onClick={() => (window.location.href = "/live")}
+              >
+                <span style={{ fontSize: "18px" }}>🔴</span>
+                <span style={{ color: "var(--accent)", fontWeight: 600 }}>
+                  Currently Live
+                </span>
               </div>
             )}
           </div>
@@ -179,14 +191,44 @@ export default function Home() {
         <div
           style={{
             textAlign: "center",
-            marginTop: "2rem",
+            marginTop: "1.5rem",
             marginBottom: "1rem",
+            padding: "1rem",
+            background: "var(--surface)",
+            borderRadius: "12px",
+            boxShadow: "0 4px 12px var(--shadow)",
           }}
         >
+          <div style={{ marginBottom: "0.75rem" }}>
+            <h4
+              style={{
+                margin: "0 0 0.25rem 0",
+                color: "var(--accent)",
+                fontSize: "1.1rem",
+              }}
+            >
+              🚀 Enhanced Experience
+            </h4>
+            <p
+              style={{
+                margin: 0,
+                fontSize: "0.9rem",
+                color: "var(--muted)",
+                lineHeight: 1.4,
+              }}
+            >
+              Install for offline access, push notifications, and seamless
+              reading of your favorite poems.
+            </p>
+          </div>
           <button
             onClick={installApp}
             className="btn-primary"
-            style={{ maxWidth: "300px" }}
+            style={{
+              maxWidth: "280px",
+              fontSize: "1rem",
+              padding: "12px 20px",
+            }}
           >
             Install App
           </button>

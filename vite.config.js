@@ -1,35 +1,95 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-import { VitePWA } from 'vite-plugin-pwa'
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import { VitePWA } from "vite-plugin-pwa";
 
 export default defineConfig({
-  base: '/', // ✅ REQUIRED for Netlify
+  base: "/", // ✅ REQUIRED for Netlify
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg'],
-      manifest: {
-        name: 'Fabris Thee Luo Poet',
-        short_name: 'FTLP',
-        start_url: '/',
-        scope: '/',
-        display: 'standalone',
-        background_color: '#ffffff',
-        theme_color: '#000000',
-        icons: [
+      registerType: "autoUpdate",
+      includeAssets: [
+        "favicon.svg",
+        "MyLogo.png",
+        "profile.jpeg",
+        "profile.svg",
+      ],
+      workbox: {
+        // Cache all static assets
+        globPatterns: [
+          "**/*.{js,css,html,ico,png,jpg,jpeg,svg,woff,woff2,ttf,eot}",
+        ],
+        // Don't cache API calls or database requests
+        runtimeCaching: [
           {
-            src: '/pwa-192x192.png',
-            sizes: '192x192',
-            type: 'image/png',
+            urlPattern: /^https:\/\/.*\.supabase\.co\/.*/,
+            handler: "NetworkOnly",
+            options: {
+              cacheName: "supabase-api",
+              expiration: {
+                maxEntries: 10,
+                maxAgeSeconds: 60 * 60 * 24, // 24 hours
+              },
+            },
           },
           {
-            src: '/pwa-512x512.png',
-            sizes: '512x512',
-            type: 'image/png',
+            urlPattern: /\/api\/.*/,
+            handler: "NetworkOnly",
+            options: {
+              cacheName: "api-calls",
+              expiration: {
+                maxEntries: 50,
+                maxAgeSeconds: 60 * 60, // 1 hour
+              },
+            },
+          },
+          // Cache images and other static assets with longer expiration
+          {
+            urlPattern: /\.(?:png|jpg|jpeg|svg|gif|webp)$/,
+            handler: "CacheFirst",
+            options: {
+              cacheName: "images",
+              expiration: {
+                maxEntries: 100,
+                maxAgeSeconds: 60 * 60 * 24 * 30, // 30 days
+              },
+            },
+          },
+          // Cache fonts
+          {
+            urlPattern: /\.(?:woff|woff2|ttf|eot)$/,
+            handler: "CacheFirst",
+            options: {
+              cacheName: "fonts",
+              expiration: {
+                maxEntries: 10,
+                maxAgeSeconds: 60 * 60 * 24 * 365, // 1 year
+              },
+            },
+          },
+        ],
+      },
+      manifest: {
+        name: "Fabris Thee Luo Poet",
+        short_name: "FTLP",
+        start_url: "/",
+        scope: "/",
+        display: "standalone",
+        background_color: "#ffffff",
+        theme_color: "#000000",
+        icons: [
+          {
+            src: "/MyLogo.png",
+            sizes: "192x192",
+            type: "image/png",
+          },
+          {
+            src: "/MyLogo.png",
+            sizes: "512x512",
+            type: "image/png",
           },
         ],
       },
     }),
   ],
-})
+});

@@ -30,34 +30,45 @@ export default function Footer() {
   };
 
   return (
-    <>
+    <footer className="footer">
       {isHomePage && (
-        <section className="intro">
+        <div style={{ textAlign: "center", marginBottom: "1.5rem" }}>
           <IdentityMark />
-
-          <p>
+          <p
+            style={{
+              margin: "0.75rem 0 0",
+              fontSize: "0.9rem",
+              lineHeight: 1.4,
+            }}
+          >
             A mobile-first poetry & media space — public art, private control.
           </p>
-        </section>
-      )}
-      <footer className="footer">
-        <div style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
-          <div>© Fabris Thee Luo Poet</div>
-          {isPublicPage && (
-            <div
-              onClick={handleIconClick}
-              style={{
-                cursor: "inherit",
-                fontSize: "16px",
-                userSelect: "none",
-                opacity: 0.6,
-              }}
-            >
-              🔒
-            </div>
-          )}
         </div>
-      </footer>
-    </>
+      )}
+      <div
+        style={{
+          display: "flex",
+          gap: "1rem",
+          alignItems: "center",
+          justifyContent: "center",
+          marginTop: isHomePage ? "0" : "auto",
+        }}
+      >
+        <div>© Fabris Thee Luo Poet</div>
+        {isPublicPage && (
+          <div
+            onClick={handleIconClick}
+            style={{
+              cursor: "inherit",
+              fontSize: "16px",
+              userSelect: "none",
+              opacity: 0.6,
+            }}
+          >
+            🔒
+          </div>
+        )}
+      </div>
+    </footer>
   );
 }
