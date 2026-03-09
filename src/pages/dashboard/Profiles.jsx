@@ -7,12 +7,13 @@ import {
   insertRecord,
   deleteRecord,
   getActiveProfilePhoto,
+  getUserProfilePhotos,
 } from "../../lib/db";
 import { useToast } from "../../context/ToastProvider";
 import { useAuth } from "../../context/AuthProvider";
 import { supabase } from "../../lib/supabase";
 
-export default function DashboardSettings() {
+export default function DashboardProfiles() {
   const { profiles = [], refetchProfiles } = useDashboardContext();
   const { user } = useAuth();
   const profile = profiles?.find((p) => p.auth_uid === user?.id) || {};
@@ -25,7 +26,13 @@ export default function DashboardSettings() {
     profile?.photo_history || [],
   );
   const [activePhoto, setActivePhoto] = useState(null);
+  const [allUserPhotos, setAllUserPhotos] = useState([]);
+  const [showExistingPhotos, setShowExistingPhotos] = useState(false);
   const [modalPhoto, setModalPhoto] = useState(null);
+  const [autoSwitch, setAutoSwitch] = useState(!!profile?.auto_switch);
+  const [autoSwitchInterval, setAutoSwitchInterval] = useState(
+    profile?.auto_switch_interval_hours || 0,
+  );
   const [displayName, setDisplayName] = useState(profile?.display_name || "");
   const [bio, setBio] = useState(profile?.bio || "");
   const [saving, setSaving] = useState(false);
@@ -63,6 +70,17 @@ export default function DashboardSettings() {
       }
     };
     fetchActivePhoto();
+  }, [user?.id]);
+
+  // Fetch all user profile photos
+  useEffect(() => {
+    const fetchAllUserPhotos = async () => {
+      if (user?.id) {
+        const photos = await getUserProfilePhotos(user.id);
+        setAllUserPhotos(photos);
+      }
+    };
+    fetchAllUserPhotos();
   }, [user?.id]);
 
   const handleFileSelect = (e) => {
@@ -160,9 +178,10 @@ export default function DashboardSettings() {
       setUploading(false);
       setSelectedFile(null);
       setCroppedFile(null);
-      // Refetch active photo
+      // Refetch active photo and all user photos
       if (user?.id) {
         getActiveProfilePhoto(user.id).then(setActivePhoto);
+        getUserProfilePhotos(user.id).then(setAllUserPhotos);
       }
     }
   };
@@ -171,6 +190,105 @@ export default function DashboardSettings() {
     setShowPreview(false);
     setCroppedFile(null);
     setSelectedFile(null);
+  };
+
+  const switchActivePhoto = async (photoId) => {
+    if (!user?.id) return;
+
+    try {
+      console.log("🔄 Switching active photo to:", photoId);
+
+      // Step 1: Set ALL photos for this user to inactive (active: false)
+      console.log("📝 Step 1: Setting all photos to inactive");
+      const { data: allPhotos, error: fetchError } = await supabase
+        .from("profile_photos")
+        .select("id, active")
+        .eq("user_id", user.id);
+
+      if (fetchError) {
+        console.error("❌ Error fetching photos:", fetchError);
+        throw fetchError;
+      }
+
+      console.log(
+        "📋 Found photos:",
+        allPhotos?.map((p) => ({ id: p.id, active: p.active })),
+      );
+
+      // Use a transaction-like approach: update all to false, then set one to true
+      console.log("📝 Step 2: Deactivating all photos");
+      const { error: deactivateError } = await supabase
+        .from("profile_photos")
+        .update({ active: false })
+        .eq("user_id", user.id);
+
+      if (deactivateError) {
+        console.error("❌ Error deactivating photos:", deactivateError);
+        throw deactivateError;
+      }
+
+      console.log("✅ All photos set to active: false");
+
+      // Step 3: Set the selected photo to active (active: true)
+      console.log("📝 Step 3: Activating selected photo");
+      const { error: activateError } = await supabase
+        .from("profile_photos")
+        .update({ active: true })
+        .eq("id", photoId)
+        .eq("user_id", user.id); // Extra safety
+
+      if (activateError) {
+        console.error("❌ Error activating photo:", activateError);
+        throw activateError;
+      }
+
+      console.log("✅ Selected photo set to active: true");
+
+      // Step 4: Update local state to match database
+      const updatedPhotos = allUserPhotos.map((photo) => ({
+        ...photo,
+        active: photo.id === photoId,
+      }));
+      setAllUserPhotos(updatedPhotos);
+
+      const newActivePhoto = updatedPhotos.find(
+        (photo) => photo.id === photoId,
+      );
+      setActivePhoto(newActivePhoto);
+
+      console.log("🎉 Photo switch completed successfully");
+      addToast("Profile photo updated successfully", "success");
+    } catch (err) {
+      console.error("💥 Error in switchActivePhoto:", err);
+      addToast(
+        "Error updating active photo: " + (err?.message || err),
+        "error",
+      );
+    }
+  };
+
+  const updateAutoSwitchInterval = async (intervalHours) => {
+    if (!profile?.id) return;
+    try {
+      const isEnabled = intervalHours > 0;
+      const res = await updateRecord("profiles", profile.id, {
+        auto_switch: isEnabled,
+        auto_switch_interval_hours: intervalHours,
+        updated_at: new Date().toISOString(),
+      });
+      if (!res.success) throw new Error(res.error || "DB update failed");
+      setAutoSwitch(isEnabled);
+      setAutoSwitchInterval(intervalHours);
+      addToast(
+        intervalHours === 0
+          ? "Auto-switch disabled - photos will stay static"
+          : `Auto-switch enabled - photos will change every ${intervalHours} hour${intervalHours > 1 ? "s" : ""}`,
+        "success",
+      );
+      setTimeout(() => refetchProfiles?.(), 300);
+    } catch (err) {
+      addToast("Error updating auto-switch: " + (err?.message || err), "error");
+    }
   };
 
   const openModal = (photo) => setModalPhoto(photo);
@@ -444,13 +562,160 @@ export default function DashboardSettings() {
                 <small style={{ color: "var(--muted)" }}>
                   JPG, PNG or GIF. Max 5MB.
                 </small>
+                <button
+                  onClick={() => setShowExistingPhotos(!showExistingPhotos)}
+                  style={{
+                    width: "100%",
+                    padding: "10px 12px",
+                    border: "1px solid var(--border)",
+                    borderRadius: 6,
+                    background: "var(--surface)",
+                    cursor: "pointer",
+                    fontWeight: 500,
+                    marginTop: 8,
+                  }}
+                >
+                  {showExistingPhotos
+                    ? "Hide Existing Photos"
+                    : "Choose from Existing"}
+                  <span style={{ marginLeft: 8 }}>
+                    {showExistingPhotos ? "▲" : "▼"}
+                  </span>
+                </button>
+                {showExistingPhotos && (
+                  <div style={{ marginTop: 12 }}>
+                    {allUserPhotos.length === 0 ? (
+                      <p
+                        style={{
+                          color: "var(--muted)",
+                          textAlign: "center",
+                          padding: "20px",
+                        }}
+                      >
+                        No photos uploaded yet
+                      </p>
+                    ) : (
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns:
+                            "repeat(auto-fill, minmax(100px, 1fr))",
+                          gap: 12,
+                          maxHeight: "300px",
+                          overflowY: "auto",
+                          padding: "8px",
+                          border: "1px solid var(--border)",
+                          borderRadius: 8,
+                          background: "var(--bg)",
+                        }}
+                      >
+                        {allUserPhotos.map((photo) => (
+                          <div
+                            key={photo.id}
+                            onClick={() => switchActivePhoto(photo.id)}
+                            style={{
+                              position: "relative",
+                              cursor: "pointer",
+                              borderRadius: 8,
+                              overflow: "hidden",
+                              border: photo.active
+                                ? "2px solid var(--accent)"
+                                : "2px solid transparent",
+                              opacity: photo.active ? 1 : 0.7,
+                              transition: "all 0.2s ease",
+                            }}
+                          >
+                            <img
+                              src={photo.image_url}
+                              alt="profile option"
+                              style={{
+                                width: "100%",
+                                height: "100px",
+                                objectFit: "cover",
+                                filter: photo.active
+                                  ? "none"
+                                  : "grayscale(30%)",
+                              }}
+                              onError={(e) => (e.target.src = "/profile.svg")}
+                            />
+                            {photo.active && (
+                              <div
+                                style={{
+                                  position: "absolute",
+                                  top: 4,
+                                  right: 4,
+                                  background: "var(--accent)",
+                                  color: "white",
+                                  borderRadius: "50%",
+                                  width: 20,
+                                  height: 20,
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  fontSize: "12px",
+                                  fontWeight: "bold",
+                                }}
+                              >
+                                ✓
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div
+                      style={{
+                        marginTop: 16,
+                        paddingTop: 16,
+                        borderTop: "1px solid var(--border)",
+                      }}
+                    >
+                      <label style={{ display: "block", marginBottom: 8 }}>
+                        <span style={{ fontWeight: 500 }}>Photo Rotation</span>
+                      </label>
+                      <select
+                        value={autoSwitchInterval}
+                        onChange={(e) =>
+                          updateAutoSwitchInterval(Number(e.target.value))
+                        }
+                        style={{
+                          width: "100%",
+                          padding: "10px 12px",
+                          border: "1px solid var(--border)",
+                          borderRadius: 6,
+                          background: "var(--surface)",
+                          color: "var(--text)",
+                          cursor: "pointer",
+                          fontSize: "14px",
+                        }}
+                      >
+                        <option value={0}>
+                          Static (keep selected photo active)
+                        </option>
+                        <option value={0.5}>Every 30 minutes</option>
+                        <option value={1}>Every 1 hour</option>
+                        <option value={3}>Every 3 hours</option>
+                        <option value={5}>Every 5 hours</option>
+                      </select>
+                      <small
+                        style={{
+                          color: "var(--muted)",
+                          marginTop: 4,
+                          display: "block",
+                        }}
+                      >
+                        {autoSwitchInterval === 0
+                          ? "Selected photo will remain active until manually changed"
+                          : `Photos will automatically cycle every ${autoSwitchInterval} hour${autoSwitchInterval > 1 ? "s" : ""}`}
+                      </small>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
         </div>
       </div>
-
-      {/* Photo Modal */}
       {modalPhoto && (
         <div
           style={{

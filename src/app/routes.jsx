@@ -17,7 +17,7 @@ import DashboardComments from "../pages/dashboard/Comments";
 import DashboardInvites from "../pages/dashboard/Invites";
 import DashboardNotifications from "../pages/dashboard/Notifications";
 import DashboardMediaLibrary from "../pages/dashboard/MediaLibrary";
-import DashboardSettings from "../pages/dashboard/Settings";
+import DashboardProfiles from "../pages/dashboard/Profiles";
 
 export default function AppRoutes() {
   return (
@@ -40,7 +40,7 @@ export default function AppRoutes() {
         <Route path="invites" element={<DashboardInvites />} />
         <Route path="notifications" element={<DashboardNotifications />} />
         <Route path="library" element={<DashboardMediaLibrary />} />
-        <Route path="profile" element={<DashboardSettings />} />
+        <Route path="profile" element={<DashboardProfiles />} />
       </Route>
     </Routes>
   );

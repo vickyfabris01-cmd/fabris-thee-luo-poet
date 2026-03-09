@@ -121,7 +121,7 @@ export default function Dashboard() {
       invites: "Invites",
       notifications: "Notifications",
       media: "Media",
-      settings: "Settings",
+      profile: "Profile",
     };
     setPageTitle(titles[section] || "Dashboard");
   }, [location.pathname]);
