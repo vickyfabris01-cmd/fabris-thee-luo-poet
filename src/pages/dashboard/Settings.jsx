@@ -2,7 +2,12 @@ import { useState, useEffect } from "react";
 import { useDashboardContext } from "../Dashboard";
 import ImageCropper from "../../components/ImageCropper";
 import { uploadFile, deleteFile } from "../../lib/supabaseStorage";
-import { updateRecord, insertRecord, deleteRecord } from "../../lib/db";
+import {
+  updateRecord,
+  insertRecord,
+  deleteRecord,
+  getActiveProfilePhoto,
+} from "../../lib/db";
 import { useToast } from "../../context/ToastProvider";
 import { useAuth } from "../../context/AuthProvider";
 import { supabase } from "../../lib/supabase";
@@ -10,7 +15,7 @@ import { supabase } from "../../lib/supabase";
 export default function DashboardSettings() {
   const { profiles = [], refetchProfiles } = useDashboardContext();
   const { user } = useAuth();
-  const profile = profiles?.[0] || {};
+  const profile = profiles?.find((p) => p.auth_uid === user?.id) || {};
   const { addToast } = useToast();
 
   const [selectedFile, setSelectedFile] = useState(null);
@@ -19,11 +24,13 @@ export default function DashboardSettings() {
   const [photoHistory, setPhotoHistory] = useState(
     profile?.photo_history || [],
   );
+  const [activePhoto, setActivePhoto] = useState(null);
   const [modalPhoto, setModalPhoto] = useState(null);
-  const [autoSwitch, setAutoSwitch] = useState(!!profile?.auto_switch);
   const [displayName, setDisplayName] = useState(profile?.display_name || "");
   const [bio, setBio] = useState(profile?.bio || "");
   const [saving, setSaving] = useState(false);
+  const [croppedFile, setCroppedFile] = useState(null);
+  const [showPreview, setShowPreview] = useState(false);
 
   useEffect(() => {
     // sync profile data
@@ -38,16 +45,25 @@ export default function DashboardSettings() {
       ];
     }
     setPhotoHistory(history);
-    setAutoSwitch(!!profile?.auto_switch);
     setDisplayName(profile?.display_name || "");
     setBio(profile?.bio || "");
   }, [
     profile?.photo_history,
     profile?.profile_image,
-    profile?.auto_switch,
     profile?.display_name,
     profile?.bio,
   ]);
+
+  // Fetch active profile photo
+  useEffect(() => {
+    const fetchActivePhoto = async () => {
+      if (user?.id) {
+        const photo = await getActiveProfilePhoto(user.id);
+        setActivePhoto(photo);
+      }
+    };
+    fetchActivePhoto();
+  }, [user?.id]);
 
   const handleFileSelect = (e) => {
     const file = e.target.files?.[0];
@@ -56,10 +72,17 @@ export default function DashboardSettings() {
     setShowCropper(true);
   };
 
-  const handleCropComplete = async (croppedFile) => {
+  const handleCropComplete = (croppedFile) => {
     setShowCropper(false);
     if (!croppedFile) return;
+    setCroppedFile(croppedFile);
+    setShowPreview(true);
+  };
+
+  const handleUpload = async () => {
+    if (!croppedFile) return;
     setUploading(true);
+    setShowPreview(false);
     try {
       const uploadRes = await uploadFile(
         croppedFile,
@@ -136,7 +159,18 @@ export default function DashboardSettings() {
     } finally {
       setUploading(false);
       setSelectedFile(null);
+      setCroppedFile(null);
+      // Refetch active photo
+      if (user?.id) {
+        getActiveProfilePhoto(user.id).then(setActivePhoto);
+      }
     }
+  };
+
+  const cancelPreview = () => {
+    setShowPreview(false);
+    setCroppedFile(null);
+    setSelectedFile(null);
   };
 
   const openModal = (photo) => setModalPhoto(photo);
@@ -247,24 +281,6 @@ export default function DashboardSettings() {
     }
   };
 
-  const toggleAutoSwitch = async () => {
-    if (!profile?.id) return;
-    const next = !autoSwitch;
-    try {
-      const res = await updateRecord("profiles", profile.id, {
-        auto_switch: next,
-        auto_switch_interval_hours: 6,
-        updated_at: new Date().toISOString(),
-      });
-      if (!res.success) throw new Error(res.error || "DB update failed");
-      setAutoSwitch(next);
-      addToast("Auto-switch " + (next ? "enabled" : "disabled"), "success");
-      setTimeout(() => refetchProfiles?.(), 300);
-    } catch (err) {
-      addToast("Error updating auto-switch: " + (err?.message || err), "error");
-    }
-  };
-
   return (
     <div style={{ display: "grid", gap: 12 }}>
       {showCropper && selectedFile && (
@@ -330,141 +346,109 @@ export default function DashboardSettings() {
       <div className="card">
         <h3>📸 Profile Photo</h3>
         <div style={{ display: "grid", gap: 12 }}>
-          <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
-            <div
-              style={{
-                width: 140,
-                height: 140,
-                borderRadius: "50%",
-                overflow: "hidden",
-                border: "3px solid var(--accent)",
-                flexShrink: 0,
-              }}
-            >
-              <img
-                src={
-                  (photoHistory.find((p) => p.is_active) || {}).url ||
-                  "/profile.svg"
-                }
-                alt="active profile"
-                style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                onError={(e) => (e.target.src = "/profile.svg")}
-              />
-            </div>
-            <div style={{ flex: 1 }}>
-              <label style={{ display: "block", marginBottom: 12 }}>
-                <span
-                  style={{ display: "block", marginBottom: 6, fontWeight: 500 }}
-                >
-                  Upload New Photo
-                </span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleFileSelect}
-                  disabled={uploading}
-                  style={{ marginTop: 6 }}
-                />
-              </label>
-              <small style={{ color: "var(--muted)" }}>
-                JPG, PNG or GIF. Max 5MB.
-              </small>
-
-              <div style={{ marginTop: 12 }}>
-                <label
-                  style={{ display: "flex", gap: 8, alignItems: "center" }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={autoSwitch}
-                    onChange={toggleAutoSwitch}
-                    disabled={uploading}
-                  />
-                  <span style={{ color: "var(--muted)" }}>
-                    Auto-rotate photos every 6 hours
-                  </span>
-                </label>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Photo History Card */}
-      {photoHistory.length > 0 && (
-        <div className="card">
-          <h4>📷 Photo History ({photoHistory.length})</h4>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))",
-              gap: 12,
-            }}
-          >
-            {photoHistory.map((p, idx) => (
+          {showPreview && croppedFile ? (
+            // Preview and Upload Section
+            <div style={{ display: "grid", gap: 16, textAlign: "center" }}>
               <div
-                key={idx}
                 style={{
-                  position: "relative",
-                  paddingBottom: "100%",
+                  width: 140,
+                  height: 140,
+                  borderRadius: "50%",
                   overflow: "hidden",
-                  borderRadius: 8,
-                  border: p.is_active
-                    ? "3px solid var(--accent)"
-                    : "1px solid var(--border)",
-                  background: "var(--surface)",
-                  cursor: "pointer",
+                  border: "3px solid var(--accent)",
+                  margin: "0 auto",
                 }}
               >
                 <img
-                  src={p.url}
-                  alt={"photo-" + idx}
-                  style={{
-                    position: "absolute",
-                    inset: 0,
-                    width: "100%",
-                    height: "100%",
-                    objectFit: "cover",
-                  }}
-                  onClick={() => openModal(p)}
-                  onError={(e) => (e.target.src = "/MyLogo.png")}
+                  src={URL.createObjectURL(croppedFile)}
+                  alt="preview"
+                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
                 />
-                {p.is_active && (
-                  <div
-                    style={{
-                      position: "absolute",
-                      top: 6,
-                      right: 6,
-                      background: "var(--accent)",
-                      color: "white",
-                      padding: "4px 8px",
-                      borderRadius: 4,
-                      fontSize: "0.75rem",
-                      fontWeight: 600,
-                    }}
-                  >
-                    Active
-                  </div>
-                )}
-                <small
+              </div>
+              <p style={{ color: "var(--muted)", margin: 0 }}>
+                This is how your profile photo will look. Click upload to save
+                it.
+              </p>
+              <div
+                style={{ display: "flex", gap: 12, justifyContent: "center" }}
+              >
+                <button
+                  onClick={cancelPreview}
                   style={{
-                    position: "absolute",
-                    left: 6,
-                    bottom: 6,
-                    background: "rgba(0,0,0,0.5)",
-                    color: "white",
-                    padding: "2px 6px",
-                    borderRadius: 4,
-                    fontSize: "0.75rem",
+                    padding: "10px 20px",
+                    border: "1px solid var(--border)",
+                    background: "var(--surface)",
+                    borderRadius: 8,
+                    cursor: "pointer",
                   }}
                 >
-                  {new Date(p.uploaded_at).toLocaleDateString()}
+                  Cancel
+                </button>
+                <button
+                  className="btn-primary"
+                  onClick={handleUpload}
+                  disabled={uploading}
+                  style={{ padding: "10px 20px" }}
+                >
+                  {uploading ? "Uploading..." : "Upload Photo"}
+                </button>
+              </div>
+            </div>
+          ) : (
+            // Current Photo Display and Upload Section
+            <div style={{ display: "grid", gap: 16, textAlign: "center" }}>
+              <div
+                style={{
+                  width: 140,
+                  height: 140,
+                  borderRadius: "50%",
+                  overflow: "hidden",
+                  border: "3px solid var(--accent)",
+                  margin: "0 auto",
+                }}
+              >
+                <img
+                  src={activePhoto?.image_url || "/profile.svg"}
+                  alt="active profile"
+                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                  onError={(e) => (e.target.src = "/profile.svg")}
+                />
+              </div>
+              <div>
+                <label style={{ display: "block", marginBottom: 12 }}>
+                  <span
+                    style={{
+                      display: "block",
+                      marginBottom: 6,
+                      fontWeight: 500,
+                    }}
+                  >
+                    Upload New Photo
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFileSelect}
+                    disabled={uploading}
+                    style={{
+                      marginTop: 6,
+                      padding: "8px 12px",
+                      border: "1px solid var(--border)",
+                      borderRadius: 6,
+                      background: "var(--surface)",
+                      cursor: uploading ? "not-allowed" : "pointer",
+                      width: "100%",
+                    }}
+                  />
+                </label>
+                <small style={{ color: "var(--muted)" }}>
+                  JPG, PNG or GIF. Max 5MB.
                 </small>
               </div>
-            ))}
-          </div>
+            </div>
+          )}
         </div>
-      )}
+      </div>
 
       {/* Photo Modal */}
       {modalPhoto && (

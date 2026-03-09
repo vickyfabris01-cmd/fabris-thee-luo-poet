@@ -1,15 +1,23 @@
-import { useSupabaseQuery } from "../lib/db";
+import { useState, useEffect } from "react";
+import { getActiveProfilePhoto } from "../lib/db";
+import { useAuth } from "../context/AuthProvider";
 
 export default function IdentityMark() {
   const fallback = "/profile.jpeg";
-  const { data: profiles = [] } = useSupabaseQuery("profiles");
-  const profile = profiles?.[0];
+  const { user } = useAuth();
+  const [activePhoto, setActivePhoto] = useState(null);
 
-  // Get active photo from history, fallback to old profile_image field, then fallback to default
-  const photoHistory = profile?.photo_history || [];
-  const activePhoto = photoHistory.find((p) => p.is_active);
-  const imageUrl = activePhoto?.url || profile?.profile_image || fallback;
+  useEffect(() => {
+    const fetchActivePhoto = async () => {
+      if (user?.id) {
+        const photo = await getActiveProfilePhoto(user.id);
+        setActivePhoto(photo);
+      }
+    };
+    fetchActivePhoto();
+  }, [user?.id]);
 
+  const imageUrl = activePhoto?.image_url || fallback;
   const isFallback = imageUrl === fallback;
 
   return (
