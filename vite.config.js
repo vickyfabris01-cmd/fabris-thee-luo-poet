@@ -10,7 +10,7 @@ export default defineConfig({
       registerType: "autoUpdate",
       includeAssets: [
         "favicon.svg",
-        "MyLogo.png",
+        "MyLogo.svg",
         "profile.jpeg",
         "profile.svg",
       ],
@@ -71,12 +71,12 @@ export default defineConfig({
       },
       manifest: {
         name: "Fabris Thee Luo Poet",
-        short_name: "FTLP",
+        short_name: "FLP",
         start_url: "/",
         scope: "/",
         display: "standalone",
-        background_color: "#ffffff",
-        theme_color: "#000000",
+        background_color: "#20201ee5",
+        theme_color: "#e77c18",
         icons: [
           {
             src: "/MyLogo.png",
@@ -84,7 +84,7 @@ export default defineConfig({
             type: "image/png",
           },
           {
-            src: "/MyLogo.png",
+            src: "/MyLogo.svg",
             sizes: "512x512",
             type: "image/png",
           },
