@@ -16,6 +16,18 @@ export default function Footer() {
   const { data: profiles = [] } = useSupabaseQuery("profiles");
   const userProfile = profiles?.find((p) => p.auth_uid === user?.id) || {};
 
+  // For public display, use the first profile if no user is authenticated
+  const displayProfile = user ? userProfile : profiles?.[0] || {};
+
+  useEffect(() => {
+    console.debug("Footer profile data:", {
+      userId: user?.id,
+      profilesCount: profiles.length,
+      userProfile,
+      displayProfile,
+    });
+  }, [user?.id, profiles, userProfile, displayProfile]);
+
   // Reset icon clicks after 3 seconds of inactivity
   useEffect(() => {
     if (iconClicks === 0) return;
@@ -40,22 +52,22 @@ export default function Footer() {
     <footer className="footer">
       {isHomePage && (
         <div style={{ textAlign: "center", marginBottom: "1.5rem" }}>
-          <IdentityMark />
-          <p
-            style={{
-              margin: "0.75rem 0 0",
-              fontSize: "0.9rem",
-              lineHeight: 1.4,
-            }}
-          >
-            {userProfile?.display_name && userProfile?.bio ? (
-              <>
-                <strong>{userProfile.display_name}</strong> — {userProfile.bio}
-              </>
-            ) : (
-              "A mobile-first poetry & media space — public art, private control."
-            )}
-          </p>
+          <IdentityMark userId={displayProfile?.auth_uid} />
+          {(displayProfile?.display_name || displayProfile?.bio) && (
+            <p
+              style={{
+                margin: "0.75rem 0 0",
+                fontSize: "0.9rem",
+                lineHeight: 1.4,
+              }}
+            >
+              {displayProfile?.display_name && (
+                <strong>{displayProfile.display_name}</strong>
+              )}
+              {displayProfile?.display_name && displayProfile?.bio && " — "}
+              {displayProfile?.bio && displayProfile.bio}
+            </p>
+          )}
         </div>
       )}
       <div
