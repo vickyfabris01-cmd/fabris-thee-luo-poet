@@ -1,6 +1,7 @@
 import { useSupabaseQuery } from "../lib/db";
 import { getYouTubeEmbedUrl } from "../lib/youtube";
 import { useState, useRef, useEffect } from "react";
+import ContentActions from "../components/ContentActions";
 
 export default function Live() {
   const { data: liveSettings = [] } = useSupabaseQuery("live_settings");
@@ -13,6 +14,9 @@ export default function Live() {
   const [isInView, setIsInView] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
   const [isPlaying, setIsPlaying] = useState(false);
+
+  const [showComments, setShowComments] = useState(false);
+
   const videoRef = useRef(null);
   const containerRef = useRef(null);
 
@@ -38,9 +42,7 @@ export default function Live() {
   useEffect(() => {
     if (videoRef.current) {
       if (isInView && !isEnabled) {
-        videoRef.current.play().catch(() => {
-          // Autoplay failed, user interaction required
-        });
+        videoRef.current.play().catch(() => {});
         setIsPlaying(true);
       } else {
         videoRef.current.pause();
@@ -66,6 +68,14 @@ export default function Live() {
         setIsPlaying(true);
       }
     }
+  };
+
+  const handleLike = (liked, newLikes) => {
+    console.log("Liked:", liked, "Total:", newLikes);
+  };
+
+  const handleToggleComments = (state) => {
+    setShowComments(state);
   };
 
   return (
@@ -152,12 +162,28 @@ export default function Live() {
             </div>
             <div style={{ marginTop: 8 }}>
               <div style={{ color: "var(--muted)", marginTop: 6 }}>
-                Preview - Coming Soon to Live
+                🚨 No live session currently. Check back later! 🚨
               </div>
             </div>
           </div>
         )}
       </section>
+
+      <ContentActions
+        contentType="live"
+        contentId="live-session"
+        initialLikes={0}
+        commentCount={0}
+        onLike={handleLike}
+        onToggleComments={handleToggleComments}
+        showComments={showComments}
+      />
+
+      {showComments && (
+        <div style={{ marginTop: 10 }}>
+          <p>Comments will appear here.</p>
+        </div>
+      )}
     </div>
   );
 }

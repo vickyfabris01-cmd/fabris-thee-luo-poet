@@ -152,7 +152,7 @@ export default function Header() {
 
         <div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
           <Link to="/" className="brand">
-            <img src="/MyLogo.png" alt="Fabris Thee Luo Poet" />
+            <img src="/MyLogo.svg" alt="FTLP" />
           </Link>
         </div>
       </header>
