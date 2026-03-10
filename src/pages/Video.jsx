@@ -7,7 +7,9 @@ import {
 } from "../lib/youtube";
 import Loader from "../components/Loader";
 import { useState, useEffect } from "react";
+import { recordLike, getLikeCount } from "../lib/db";
 import ContentActions from "../components/ContentActions";
+import { supabase } from "../lib/supabase";
 
 // Trim long titles to reasonable length with ellipsis
 function trimTitle(title, maxLength = 60) {
@@ -36,6 +38,44 @@ export default function Video() {
   const [liked, setLiked] = useState(false);
   const [showComments, setShowComments] = useState(false);
 
+  // keep the count in sync with the new likes table
+  useEffect(() => {
+    if (id) {
+      getLikeCount("video", id).then((c) => setLikes(c));
+    }
+  }, [id]);
+
+  // Subscribe to real-time like changes for this video
+  useEffect(() => {
+    if (!id) return;
+
+    const channel = supabase
+      .channel(`likes-video-${id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "likes",
+          filter: `content_type=eq.video,content_id=eq.${id}`,
+        },
+        (payload) => {
+          console.log("Real-time like update for video:", payload);
+          // Adjust like count based on the new like event
+          if (payload.new.liked) {
+            setLikes((prev) => prev + 1);
+          } else {
+            setLikes((prev) => Math.max(0, prev - 1)); // Prevent negative counts
+          }
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [id]);
+
   const video = videos.find((v) => v.id == id);
   const currentIndex = videos.findIndex((v) => v.id == id);
   const hasPrevious = currentIndex > 0;
@@ -54,11 +94,48 @@ export default function Video() {
     const [liked, setLiked] = useState(initialLiked);
     const [likes, setLikes] = useState(initialLikes);
 
+    // ensure like count reflects likes table
+    useEffect(() => {
+      getLikeCount("comment", commentId).then((c) => setLikes(c));
+    }, [commentId]);
+
+    // Subscribe to real-time like changes for this comment
+    useEffect(() => {
+      const channel = supabase
+        .channel(`likes-comment-${commentId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "likes",
+            filter: `content_type=eq.comment,content_id=eq.${commentId}`,
+          },
+          (payload) => {
+            console.log("Real-time like update for comment:", payload);
+            // Adjust like count based on the new like event
+            if (payload.new.liked) {
+              setLikes((prev) => prev + 1);
+            } else {
+              setLikes((prev) => Math.max(0, prev - 1)); // Prevent negative counts
+            }
+          },
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }, [commentId]);
+
     const handleLike = async () => {
       try {
         const newLiked = !liked;
         await updateRecord("comments", commentId, { like: newLiked });
+        // also record in likes table for analytics
+        await recordLike("comment", commentId, newLiked);
         setLiked(newLiked);
+        setLikes(newLiked ? likes + 1 : likes - 1);
         // Refetch comments to get updated like counts
         refetchComments();
       } catch (error) {
@@ -445,9 +522,12 @@ export default function Video() {
             contentId={id}
             initialLikes={likes}
             commentCount={reflectionsFor(id).length}
-            onLike={() => {
-              setLiked(!liked);
-              setLikes(liked ? likes - 1 : likes + 1);
+            onLike={async () => {
+              const newLiked = !liked;
+              setLiked(newLiked);
+              setLikes(newLiked ? likes + 1 : likes - 1);
+              // persist the like event
+              await recordLike("video", id, newLiked);
             }}
             onToggleComments={(showComments) => {
               setShowComments(showComments);

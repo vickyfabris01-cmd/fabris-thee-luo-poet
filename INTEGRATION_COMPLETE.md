@@ -152,7 +152,7 @@ CREATE TABLE invites (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Additional tables (media_assets, notifications, profiles)
+-- Additional tables (media_assets, notifications, profiles, likes)
 -- See SUPABASE_SETUP.md for full schema
 ```
 

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { recordLike, getLikeCount } from "../lib/db";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useSupabaseQuery, insertRecord, updateRecord } from "../lib/db";
 import {
@@ -8,6 +9,7 @@ import {
   trimToWords,
 } from "../lib/format";
 import ContentActions from "../components/ContentActions";
+import { supabase } from "../lib/supabase";
 
 export default function PoemPage() {
   const { id } = useParams();
@@ -41,6 +43,43 @@ export default function PoemPage() {
   const [likes, setLikes] = useState(0);
   const [liked, setLiked] = useState(false);
   const [showComments, setShowComments] = useState(false);
+
+  useEffect(() => {
+    if (id) {
+      getLikeCount("poem", id).then((c) => setLikes(c));
+    }
+  }, [id]);
+
+  // Subscribe to real-time like changes for this poem
+  useEffect(() => {
+    if (!id) return;
+
+    const channel = supabase
+      .channel(`likes-poem-${id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "likes",
+          filter: `content_type=eq.poem,content_id=eq.${id}`,
+        },
+        (payload) => {
+          console.log("Real-time like update for poem:", payload);
+          // Adjust like count based on the new like event
+          if (payload.new.liked) {
+            setLikes((prev) => prev + 1);
+          } else {
+            setLikes((prev) => Math.max(0, prev - 1)); // Prevent negative counts
+          }
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [id]);
   // Reset transition state when id changes
   useEffect(() => {
     setIsTransitioning(false);
@@ -52,11 +91,48 @@ export default function PoemPage() {
     const [liked, setLiked] = useState(initialLiked);
     const [likes, setLikes] = useState(initialLikes);
 
+    // update like count from likes table if available
+    useEffect(() => {
+      getLikeCount("comment", commentId).then((c) => setLikes(c));
+    }, [commentId]);
+
+    // Subscribe to real-time like changes for this comment
+    useEffect(() => {
+      const channel = supabase
+        .channel(`likes-comment-${commentId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "likes",
+            filter: `content_type=eq.comment,content_id=eq.${commentId}`,
+          },
+          (payload) => {
+            console.log("Real-time like update for comment:", payload);
+            // Adjust like count based on the new like event
+            if (payload.new.liked) {
+              setLikes((prev) => prev + 1);
+            } else {
+              setLikes((prev) => Math.max(0, prev - 1)); // Prevent negative counts
+            }
+          },
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }, [commentId]);
+
     const handleLike = async () => {
       try {
         const newLiked = !liked;
         await updateRecord("comments", commentId, { like: newLiked });
+        // persist like event as well
+        await recordLike("comment", commentId, newLiked);
         setLiked(newLiked);
+        setLikes(newLiked ? likes + 1 : likes - 1);
         // Refetch comments to get updated like counts
         refetchComments();
       } catch (error) {
@@ -270,9 +346,11 @@ export default function PoemPage() {
             contentId={id}
             initialLikes={likes}
             commentCount={reflectionsFor(id).length}
-            onLike={() => {
-              setLiked(!liked);
-              setLikes(liked ? likes - 1 : likes + 1);
+            onLike={async () => {
+              const newLiked = !liked;
+              setLiked(newLiked);
+              setLikes(newLiked ? likes + 1 : likes - 1);
+              await recordLike("poem", id, newLiked);
             }}
             onToggleComments={(showComments) => {
               setShowComments(showComments);

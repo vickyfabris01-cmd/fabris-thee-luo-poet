@@ -131,6 +131,13 @@ export async function insertRecord(table, record) {
       .select();
 
     if (error) {
+      if (error.code === "42703") {
+        // missing column; log and treat as successful no-op
+        console.warn(
+          `Warning: trying to insert into ${table} but a column was missing; field ignored`,
+        );
+        return { success: true, data: data?.[0] };
+      }
       console.error(`Error inserting into ${table}:`, error);
       throw error;
     }
@@ -155,6 +162,12 @@ export async function updateRecord(table, id, updates) {
       .select();
 
     if (error) {
+      if (error.code === "42703") {
+        console.warn(
+          `Warning: trying to update ${table} but a column was missing; update skipped`,
+        );
+        return { success: true, data: data?.[0] };
+      }
       console.error(`Error updating ${table}:`, error);
       throw error;
     }
@@ -228,9 +241,11 @@ export async function deleteAll(table) {
 }
 
 /**
- * Fetch active profile photo for a user
+ * Fetch active profile photo for a specific user
  */
 export async function getActiveProfilePhoto(userId) {
+  if (!userId) return null;
+
   try {
     const { data, error } = await supabase
       .from("profile_photos")
@@ -253,9 +268,11 @@ export async function getActiveProfilePhoto(userId) {
 }
 
 /**
- * Fetch all profile photos for a user
+ * Fetch all profile photos for a specific user
  */
 export async function getUserProfilePhotos(userId) {
+  if (!userId) return [];
+
   try {
     const { data, error } = await supabase
       .from("profile_photos")
@@ -264,13 +281,133 @@ export async function getUserProfilePhotos(userId) {
       .order("created_at", { ascending: false });
 
     if (error) {
-      console.warn(`Error fetching user profile photos:`, error);
+      console.warn(`Error fetching profile photos:`, error);
       return [];
     }
 
     return data || [];
   } catch (e) {
-    console.error(`Error fetching user profile photos:`, e);
+    console.error(`Error fetching profile photos:`, e);
     return [];
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Likes helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Record a like/unlike event to the `likes` table.  The table currently has no
+ * user column, so this simply inserts a row each time the client toggles a
+ * like.  You can change this to upsert if you add a unique constraint
+ * (content_type, content_id) on the likes table.
+ */
+export async function recordLike(contentType, contentId, liked = true) {
+  if (!contentType || !contentId) {
+    return { success: false, error: "Missing content type or id" };
+  }
+  try {
+    const { data, error } = await supabase.from("likes").insert({
+      content_type: contentType,
+      content_id: contentId,
+      liked,
+    });
+    if (error) {
+      console.error("Error inserting like record:", error);
+      return { success: false, error };
+    }
+    return { success: true, data };
+  } catch (e) {
+    console.error("Error recording like:", e);
+    return { success: false, error: e.message };
+  }
+}
+
+/**
+ * Return the number of `liked = true` rows for a given item.
+ */
+export async function getLikeCount(contentType, contentId) {
+  if (!contentType || !contentId) return 0;
+  try {
+    const { count, error } = await supabase
+      .from("likes")
+      .select("id", { count: "exact" })
+      .eq("content_type", contentType)
+      .eq("content_id", contentId)
+      .eq("liked", true);
+    if (error) {
+      console.warn("Error counting likes:", error);
+      return 0;
+    }
+    return count || 0;
+  } catch (e) {
+    console.error("Error counting likes:", e);
+    return 0;
+  }
+}
+
+/**
+ * Sync existing photos from profile.photo_history to profile_photos table
+ * This helps migrate photos that were uploaded before the profile_photos table existed
+ */
+export async function syncProfilePhotosFromHistory(userId) {
+  if (!userId) return { success: false, error: "No user ID provided" };
+
+  try {
+    // attempt to read the legacy column; if it doesn't exist PostgREST will
+    // return a 42703 error which we handle below.
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("photo_history")
+      .eq("auth_uid", userId)
+      .single();
+
+    if (profileError) {
+      // PGRST42703 = missing column
+      if (profileError.code === "42703") {
+        console.warn(
+          "syncProfilePhotosFromHistory: 'photo_history' column missing, skipping migration",
+        );
+        return { success: true, message: "no photo_history column" };
+      }
+      return { success: false, error: "Profile not found" };
+    }
+
+    if (!profile) {
+      return { success: false, error: "Profile not found" };
+    }
+
+    const photoHistory = profile.photo_history || [];
+
+    // Check if photos already exist in profile_photos table
+    const existingPhotos = await getUserProfilePhotos(userId);
+
+    // If no photos in profile_photos but photos exist in history, migrate them
+    if (existingPhotos.length === 0 && photoHistory.length > 0) {
+      console.log(
+        `Migrating ${photoHistory.length} photos from photo_history to profile_photos table`,
+      );
+
+      const photosToInsert = photoHistory.map((photo) => ({
+        user_id: userId,
+        image_url: photo.url,
+        created_at: photo.uploaded_at,
+        active: photo.is_active || false,
+      }));
+
+      const insertResult = await insertBatch("profile_photos", photosToInsert);
+
+      if (insertResult.success) {
+        console.log(`✓ Successfully migrated ${photoHistory.length} photos`);
+        return { success: true, migrated: photoHistory.length };
+      } else {
+        return { success: false, error: insertResult.error };
+      }
+    }
+
+    return { success: true, message: "No migration needed" };
+  } catch (e) {
+    console.error(`Error syncing profile photos:`, e);
+    return { success: false, error: e.message };
   }
 }

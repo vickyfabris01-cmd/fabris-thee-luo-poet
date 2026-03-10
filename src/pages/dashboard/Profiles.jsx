@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useDashboardContext } from "../Dashboard";
 import ImageCropper from "../../components/ImageCropper";
+import Modal from "../../components/Modal";
 import { uploadFile, deleteFile } from "../../lib/supabaseStorage";
 import {
   updateRecord,
@@ -8,6 +9,7 @@ import {
   deleteRecord,
   getActiveProfilePhoto,
   getUserProfilePhotos,
+  syncProfilePhotosFromHistory,
 } from "../../lib/db";
 import { useToast } from "../../context/ToastProvider";
 import { useAuth } from "../../context/AuthProvider";
@@ -19,6 +21,14 @@ export default function DashboardProfiles() {
   const profile = profiles?.find((p) => p.auth_uid === user?.id) || {};
   const { addToast } = useToast();
 
+  // Debug logging
+  console.log("DashboardProfiles Debug:");
+  console.log("User:", user);
+  console.log("Profiles array:", profiles);
+  console.log("Found profile:", profile);
+  console.log("Profile display_name:", profile?.display_name);
+  console.log("Profile bio:", profile?.bio);
+
   const [selectedFile, setSelectedFile] = useState(null);
   const [showCropper, setShowCropper] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -28,12 +38,10 @@ export default function DashboardProfiles() {
   const [activePhoto, setActivePhoto] = useState(null);
   const [allUserPhotos, setAllUserPhotos] = useState([]);
   const [showExistingPhotos, setShowExistingPhotos] = useState(false);
-  const [modalPhoto, setModalPhoto] = useState(null);
-  const [autoSwitch, setAutoSwitch] = useState(!!profile?.auto_switch);
-  const [autoSwitchInterval, setAutoSwitchInterval] = useState(
-    profile?.auto_switch_interval_hours || 0,
+  const [selectedPhotoForModal, setSelectedPhotoForModal] = useState(null);
+  const [displayName, setDisplayName] = useState(
+    profile?.display_name || user?.email?.split("@")[0] || "",
   );
-  const [displayName, setDisplayName] = useState(profile?.display_name || "");
   const [bio, setBio] = useState(profile?.bio || "");
   const [saving, setSaving] = useState(false);
   const [croppedFile, setCroppedFile] = useState(null);
@@ -52,7 +60,7 @@ export default function DashboardProfiles() {
       ];
     }
     setPhotoHistory(history);
-    setDisplayName(profile?.display_name || "");
+    setDisplayName(profile?.display_name || user?.email?.split("@")[0] || "");
     setBio(profile?.bio || "");
   }, [
     profile?.photo_history,
@@ -61,10 +69,13 @@ export default function DashboardProfiles() {
     profile?.bio,
   ]);
 
-  // Fetch active profile photo
+  // Fetch active profile photo (global)
   useEffect(() => {
     const fetchActivePhoto = async () => {
       if (user?.id) {
+        // First sync any existing photos from photo_history to profile_photos table
+        await syncProfilePhotosFromHistory(user.id);
+
         const photo = await getActiveProfilePhoto(user.id);
         setActivePhoto(photo);
       }
@@ -72,15 +83,15 @@ export default function DashboardProfiles() {
     fetchActivePhoto();
   }, [user?.id]);
 
-  // Fetch all user profile photos
+  // Fetch all profile photos (global)
   useEffect(() => {
-    const fetchAllUserPhotos = async () => {
+    const fetchAllPhotos = async () => {
       if (user?.id) {
         const photos = await getUserProfilePhotos(user.id);
         setAllUserPhotos(photos);
       }
     };
-    fetchAllUserPhotos();
+    fetchAllPhotos();
   }, [user?.id]);
 
   const handleFileSelect = (e) => {
@@ -113,41 +124,26 @@ export default function DashboardProfiles() {
       const newUrl = uploadRes.url;
       const timestamp = new Date().toISOString();
 
-      // Save to profile_photos table
-      if (user?.id) {
-        // Set all other photos to inactive
-        const { data: existingPhotos } = await supabase
-          .from("profile_photos")
-          .select("id")
-          .eq("user_id", user.id)
-          .eq("active", true);
+      // Save to profile_photos table (global)
+      // Insert new photo as inactive (user can activate it later)
+      const photoRes = await insertRecord("profile_photos", {
+        user_id: user.id,
+        image_url: newUrl,
+        created_at: timestamp,
+        active: false, // Changed: default to inactive
+      });
+      if (!photoRes.success) throw new Error("Failed to save profile photo");
 
-        if (existingPhotos && existingPhotos.length > 0) {
-          for (const photo of existingPhotos) {
-            await updateRecord("profile_photos", photo.id, { active: false });
-          }
-        }
-
-        // Insert new photo as active
-        const photoRes = await insertRecord("profile_photos", {
-          user_id: user.id,
-          image_url: newUrl,
-          created_at: timestamp,
-          active: true,
-        });
-        if (!photoRes.success) throw new Error("Failed to save profile photo");
-      }
-
-      // Build updated history for backward compatibility
+      // Build updated history - add as inactive
       const updated = [
-        { url: newUrl, uploaded_at: timestamp, is_active: true },
-        ...photoHistory.map((p) => ({ ...p, is_active: false })),
+        ...photoHistory, // Keep existing photos
+        { url: newUrl, uploaded_at: timestamp, is_active: false }, // New photo inactive
       ];
 
       if (profile?.id) {
         const res = await updateRecord("profiles", profile.id, {
           photo_history: updated,
-          profile_image: newUrl,
+          // Don't update profile_image since it's inactive
           updated_at: timestamp,
         });
         if (!res.success) throw new Error(res.error || "DB save failed");
@@ -157,7 +153,7 @@ export default function DashboardProfiles() {
       } else {
         const res = await insertRecord("profiles", {
           photo_history: updated,
-          profile_image: newUrl,
+          // No profile_image since no active photo
           auth_uid: user?.id,
           email: user?.email,
           display_name: displayName || user?.email?.split("@")[0] || "User",
@@ -196,46 +192,28 @@ export default function DashboardProfiles() {
     if (!user?.id) return;
 
     try {
-      console.log("🔄 Switching active photo to:", photoId);
+      console.log("🔄 Switching active photo globally to:", photoId);
 
-      // Step 1: Set ALL photos for this user to inactive (active: false)
-      console.log("📝 Step 1: Setting all photos to inactive");
-      const { data: allPhotos, error: fetchError } = await supabase
-        .from("profile_photos")
-        .select("id, active")
-        .eq("user_id", user.id);
-
-      if (fetchError) {
-        console.error("❌ Error fetching photos:", fetchError);
-        throw fetchError;
-      }
-
-      console.log(
-        "📋 Found photos:",
-        allPhotos?.map((p) => ({ id: p.id, active: p.active })),
-      );
-
-      // Use a transaction-like approach: update all to false, then set one to true
-      console.log("📝 Step 2: Deactivating all photos");
+      // Step 1: Set ALL user's photos to inactive (active: false)
+      console.log("📝 Step 1: Setting all user photos to inactive");
       const { error: deactivateError } = await supabase
         .from("profile_photos")
         .update({ active: false })
-        .eq("user_id", user.id);
+        .eq("user_id", user.id); // Only user's photos
 
       if (deactivateError) {
         console.error("❌ Error deactivating photos:", deactivateError);
         throw deactivateError;
       }
 
-      console.log("✅ All photos set to active: false");
+      console.log("✅ All user photos set to active: false");
 
-      // Step 3: Set the selected photo to active (active: true)
-      console.log("📝 Step 3: Activating selected photo");
+      // Step 2: Set the selected photo to active (active: true)
+      console.log("📝 Step 2: Activating selected photo");
       const { error: activateError } = await supabase
         .from("profile_photos")
         .update({ active: true })
-        .eq("id", photoId)
-        .eq("user_id", user.id); // Extra safety
+        .eq("id", photoId);
 
       if (activateError) {
         console.error("❌ Error activating photo:", activateError);
@@ -244,7 +222,7 @@ export default function DashboardProfiles() {
 
       console.log("✅ Selected photo set to active: true");
 
-      // Step 4: Update local state to match database
+      // Update local state to match database
       const updatedPhotos = allUserPhotos.map((photo) => ({
         ...photo,
         active: photo.id === photoId,
@@ -266,33 +244,6 @@ export default function DashboardProfiles() {
       );
     }
   };
-
-  const updateAutoSwitchInterval = async (intervalHours) => {
-    if (!profile?.id) return;
-    try {
-      const isEnabled = intervalHours > 0;
-      const res = await updateRecord("profiles", profile.id, {
-        auto_switch: isEnabled,
-        auto_switch_interval_hours: intervalHours,
-        updated_at: new Date().toISOString(),
-      });
-      if (!res.success) throw new Error(res.error || "DB update failed");
-      setAutoSwitch(isEnabled);
-      setAutoSwitchInterval(intervalHours);
-      addToast(
-        intervalHours === 0
-          ? "Auto-switch disabled - photos will stay static"
-          : `Auto-switch enabled - photos will change every ${intervalHours} hour${intervalHours > 1 ? "s" : ""}`,
-        "success",
-      );
-      setTimeout(() => refetchProfiles?.(), 300);
-    } catch (err) {
-      addToast("Error updating auto-switch: " + (err?.message || err), "error");
-    }
-  };
-
-  const openModal = (photo) => setModalPhoto(photo);
-  const closeModal = () => setModalPhoto(null);
 
   const saveProfile = async () => {
     if (!profile?.id && !user?.id) {
@@ -330,73 +281,58 @@ export default function DashboardProfiles() {
     }
   };
 
-  const handleMakeLive = async (url) => {
-    if (!profile?.id) return;
-    const updated = photoHistory.map((p) => ({
-      ...p,
-      is_active: p.url === url,
-    }));
+  const handleDeletePhoto = async (photo) => {
+    if (!user?.id || !photo?.id) return;
+    if (!confirm("Delete this photo?")) return;
+
     try {
-      const res = await updateRecord("profiles", profile.id, {
-        photo_history: updated,
-        updated_at: new Date().toISOString(),
-      });
-      if (!res.success) throw new Error(res.error || "DB update failed");
+      // Delete from profile_photos table
+      const deleteRes = await deleteRecord("profile_photos", photo.id);
+      if (!deleteRes.success)
+        throw new Error("Failed to delete photo from database");
 
-      // Also update profile_photos table
-      if (user?.id) {
-        const { data: allPhotos } = await supabase
-          .from("profile_photos")
-          .select("id")
-          .eq("user_id", user.id);
-
-        if (allPhotos) {
-          for (const photo of allPhotos) {
-            const isThisPhoto = photo.url === url || url.includes(photo.id);
-            await updateRecord("profile_photos", photo.id, {
-              active: isThisPhoto,
-            });
-          }
+      // If this was the active photo, switch to another one
+      if (photo.active && allUserPhotos.length > 1) {
+        const remainingPhotos = allUserPhotos.filter((p) => p.id !== photo.id);
+        if (remainingPhotos.length > 0) {
+          await switchActivePhoto(remainingPhotos[0].id);
         }
       }
 
-      setPhotoHistory(updated);
-      addToast("Photo set as active", "success");
-      setTimeout(() => refetchProfiles?.(), 300);
-      closeModal();
-    } catch (err) {
-      addToast("Error setting active photo: " + (err?.message || err), "error");
-    }
-  };
+      // Update local state
+      setAllUserPhotos((prev) => prev.filter((p) => p.id !== photo.id));
+      if (activePhoto?.id === photo.id) {
+        setActivePhoto(null);
+      }
 
-  const handleDelete = async (url) => {
-    if (!profile?.id) return;
-    if (!confirm("Delete this photo?")) return;
-    try {
-      // Remove from history
-      const updated = photoHistory.filter((p) => p.url !== url);
-      // If active removed, set first as active
-      if (!updated.find((p) => p.is_active) && updated.length > 0)
-        updated[0].is_active = true;
+      addToast("Photo deleted successfully", "success");
 
-      const res = await updateRecord("profiles", profile.id, {
-        photo_history: updated,
-        updated_at: new Date().toISOString(),
-      });
-      if (!res.success) throw new Error(res.error || "DB update failed");
-      setPhotoHistory(updated);
-      addToast("Photo removed", "success");
-      // attempt deleting from storage (best-effort)
+      // Attempt to delete from storage (best-effort)
       try {
-        await deleteFile(url);
+        await deleteFile(photo.image_url);
       } catch (e) {
         console.warn("Could not delete storage file:", e);
       }
-      setTimeout(() => refetchProfiles?.(), 300);
-      closeModal();
+
+      setSelectedPhotoForModal(null);
     } catch (err) {
       addToast("Error deleting photo: " + (err?.message || err), "error");
     }
+  };
+
+  const handleSwitchPhoto = async () => {
+    if (!user?.id || !selectedPhotoForModal) return;
+
+    // Find current active photo index
+    const activeIndex = allUserPhotos.findIndex((p) => p.active);
+    if (activeIndex === -1) return;
+
+    // Find next photo index (cycle through the list)
+    const nextIndex = (activeIndex + 1) % allUserPhotos.length;
+    const nextPhoto = allUserPhotos[nextIndex];
+
+    await switchActivePhoto(nextPhoto.id);
+    setSelectedPhotoForModal(null);
   };
 
   return (
@@ -612,7 +548,7 @@ export default function DashboardProfiles() {
                         {allUserPhotos.map((photo) => (
                           <div
                             key={photo.id}
-                            onClick={() => switchActivePhoto(photo.id)}
+                            onClick={() => setSelectedPhotoForModal(photo)}
                             style={{
                               position: "relative",
                               cursor: "pointer",
@@ -663,52 +599,6 @@ export default function DashboardProfiles() {
                         ))}
                       </div>
                     )}
-                    <div
-                      style={{
-                        marginTop: 16,
-                        paddingTop: 16,
-                        borderTop: "1px solid var(--border)",
-                      }}
-                    >
-                      <label style={{ display: "block", marginBottom: 8 }}>
-                        <span style={{ fontWeight: 500 }}>Photo Rotation</span>
-                      </label>
-                      <select
-                        value={autoSwitchInterval}
-                        onChange={(e) =>
-                          updateAutoSwitchInterval(Number(e.target.value))
-                        }
-                        style={{
-                          width: "100%",
-                          padding: "10px 12px",
-                          border: "1px solid var(--border)",
-                          borderRadius: 6,
-                          background: "var(--surface)",
-                          color: "var(--text)",
-                          cursor: "pointer",
-                          fontSize: "14px",
-                        }}
-                      >
-                        <option value={0}>
-                          Static (keep selected photo active)
-                        </option>
-                        <option value={0.5}>Every 30 minutes</option>
-                        <option value={1}>Every 1 hour</option>
-                        <option value={3}>Every 3 hours</option>
-                        <option value={5}>Every 5 hours</option>
-                      </select>
-                      <small
-                        style={{
-                          color: "var(--muted)",
-                          marginTop: 4,
-                          display: "block",
-                        }}
-                      >
-                        {autoSwitchInterval === 0
-                          ? "Selected photo will remain active until manually changed"
-                          : `Photos will automatically cycle every ${autoSwitchInterval} hour${autoSwitchInterval > 1 ? "s" : ""}`}
-                      </small>
-                    </div>
                   </div>
                 )}
               </div>
@@ -716,93 +606,71 @@ export default function DashboardProfiles() {
           )}
         </div>
       </div>
-      {modalPhoto && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.6)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 60,
-            padding: 16,
-          }}
-          onClick={closeModal}
+      {selectedPhotoForModal && (
+        <Modal
+          open={!!selectedPhotoForModal}
+          onClose={() => setSelectedPhotoForModal(null)}
+          title="Photo Options"
         >
-          <div
-            style={{
-              width: "min(90vw,600px)",
-              background: "var(--bg)",
-              padding: 16,
-              borderRadius: 8,
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{ display: "grid", gap: 12 }}>
-              <div
-                style={{
-                  width: "100%",
-                  height: 320,
-                  overflow: "hidden",
-                  borderRadius: 8,
-                }}
-              >
-                <img
-                  src={modalPhoto.url}
-                  alt="modal"
-                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                  onError={(e) => (e.target.src = "/MyLogo.png")}
-                />
-              </div>
-              <div>
-                <h4 style={{ marginTop: 0 }}>
-                  {modalPhoto.is_active ? "✓ Active Photo" : "Photo"}
-                </h4>
-                <p style={{ color: "var(--muted)", margin: "4px 0" }}>
-                  Uploaded: {new Date(modalPhoto.uploaded_at).toLocaleString()}
-                </p>
-              </div>
-              <div style={{ display: "flex", gap: 8 }}>
-                {!modalPhoto.is_active && (
+          <div style={{ display: "grid", gap: 16 }}>
+            <div
+              style={{
+                width: "100%",
+                height: 200,
+                overflow: "hidden",
+                borderRadius: 8,
+                border: "2px solid var(--border)",
+              }}
+            >
+              <img
+                src={selectedPhotoForModal.image_url}
+                alt="selected photo"
+                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                onError={(e) => (e.target.src = "/profile.svg")}
+              />
+            </div>
+            <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+              {selectedPhotoForModal.active ? (
+                // Active photo: Switch button only
+                <button
+                  className="btn-primary"
+                  onClick={handleSwitchPhoto}
+                  style={{ padding: "10px 20px" }}
+                >
+                  🔄 Switch to Next Photo
+                </button>
+              ) : (
+                // Inactive photo: Activate and Delete buttons
+                <>
                   <button
                     className="btn-primary"
-                    onClick={() => handleMakeLive(modalPhoto.url)}
+                    onClick={() => {
+                      switchActivePhoto(selectedPhotoForModal.id);
+                      setSelectedPhotoForModal(null);
+                    }}
+                    style={{ padding: "10px 20px" }}
                   >
-                    Set as Active
+                    ✓ Activate
                   </button>
-                )}
-                <button
-                  onClick={() => handleDelete(modalPhoto.url)}
-                  style={{
-                    flex: 1,
-                    background: "rgba(220,53,69,0.1)",
-                    border: "1px solid rgba(220,53,69,0.3)",
-                    color: "#d63545",
-                    padding: "8px 12px",
-                    borderRadius: 8,
-                    fontWeight: 600,
-                    cursor: "pointer",
-                  }}
-                >
-                  Delete
-                </button>
-                <button
-                  onClick={closeModal}
-                  style={{
-                    background: "var(--surface)",
-                    border: "1px solid var(--border)",
-                    padding: "8px 12px",
-                    borderRadius: 8,
-                    cursor: "pointer",
-                  }}
-                >
-                  Close
-                </button>
-              </div>
+                  <button
+                    onClick={() => handleDeletePhoto(selectedPhotoForModal)}
+                    style={{
+                      padding: "10px 20px",
+                      background: "rgba(220,53,69,0.1)",
+                      border: "1px solid rgba(220,53,69,0.3)",
+                      color: "#d63545",
+                      borderRadius: 8,
+                      fontWeight: 600,
+                      cursor: "pointer",
+                    }}
+                  >
+                    🗑️ Delete
+                  </button>
+                </>
+              )}
             </div>
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

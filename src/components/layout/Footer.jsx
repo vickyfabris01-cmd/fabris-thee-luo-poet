@@ -1,13 +1,20 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
+import { useAuth } from "../../context/AuthProvider";
+import { useSupabaseQuery } from "../../lib/db";
 import IdentityMark from "../IdentityMark";
 
 export default function Footer() {
   const [iconClicks, setIconClicks] = useState(0);
   const navigate = useNavigate();
   const location = useLocation();
+  const { user } = useAuth();
   const isPublicPage = !location.pathname.startsWith("/dashboard");
   const isHomePage = location.pathname === "/" || location.pathname === "/home";
+
+  // Fetch profiles to get user profile data
+  const { data: profiles = [] } = useSupabaseQuery("profiles");
+  const userProfile = profiles?.find((p) => p.auth_uid === user?.id) || {};
 
   // Reset icon clicks after 3 seconds of inactivity
   useEffect(() => {
@@ -41,7 +48,13 @@ export default function Footer() {
               lineHeight: 1.4,
             }}
           >
-            A mobile-first poetry & media space — public art, private control.
+            {userProfile?.display_name && userProfile?.bio ? (
+              <>
+                <strong>{userProfile.display_name}</strong> — {userProfile.bio}
+              </>
+            ) : (
+              "A mobile-first poetry & media space — public art, private control."
+            )}
           </p>
         </div>
       )}

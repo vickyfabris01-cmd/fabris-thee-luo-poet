@@ -1,5 +1,5 @@
 import IdentityMark from "../components/IdentityMark";
-import { useSupabaseQuery, getActiveProfilePhoto } from "../lib/db";
+import { useSupabaseQuery } from "../lib/db";
 import { Link } from "react-router-dom";
 import Loader from "../components/Loader";
 import { getYouTubeThumb } from "../lib/youtube";
@@ -14,8 +14,6 @@ export default function Home() {
     useSupabaseQuery("videos");
   const { data: liveSettings = [], loading: loadingLive } =
     useSupabaseQuery("live_settings");
-  const [profilePhoto, setProfilePhoto] = useState(null);
-  const [loadingProfilePhoto, setLoadingProfilePhoto] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState(null);
 
   const featuredPoem = (poems && poems[0]) || null;
@@ -24,19 +22,6 @@ export default function Home() {
     (liveSettings && liveSettings[0] && liveSettings[0].enabled) || false;
 
   const isLoading = loadingPoems || loadingVideos || loadingLive;
-
-  // Fetch active profile photo
-  useEffect(() => {
-    if (user?.id) {
-      const fetchProfilePhoto = async () => {
-        setLoadingProfilePhoto(true);
-        const photo = await getActiveProfilePhoto(user.id);
-        setProfilePhoto(photo);
-        setLoadingProfilePhoto(false);
-      };
-      fetchProfilePhoto();
-    }
-  }, [user?.id]);
 
   // PWA install prompt
   useEffect(() => {
@@ -71,24 +56,6 @@ export default function Home() {
             <Link to="/live" className="btn-primary">
               Watch Live
             </Link>
-          </div>
-        </section>
-      )}
-
-      {/* Profile Photo */}
-      {profilePhoto && (
-        <section className="featured-card">
-          <h4 style={{ margin: 0, color: "var(--muted)", fontWeight: 700 }}>
-            👤 Profile
-          </h4>
-          <div style={{ marginTop: 12, borderRadius: 8, overflow: "hidden" }}>
-            <img
-              src={profilePhoto.image_url}
-              alt="Profile Photo"
-              className="identity-img is-avatar"
-              style={{ width: "100%", height: "auto", borderRadius: 8 }}
-              onError={(e) => (e.target.style.display = "none")}
-            />
           </div>
         </section>
       )}

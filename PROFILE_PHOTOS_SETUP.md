@@ -11,17 +11,16 @@ Profile photos are now saved in a dedicated `profile_photos` table in Supabase. 
 ```sql
 create table profile_photos (
   id uuid default gen_random_uuid() primary key,
-  user_id uuid not null references auth.users(id) on delete cascade,
   image_url text not null,
   active boolean default false,
   created_at timestamp with time zone default now(),
 
-  constraint unique_active_per_user unique (user_id, active) where active = true
+  constraint unique_active_photo unique (active) where active = true
 );
 
 -- Create index for faster queries
-create index on profile_photos(user_id, active);
-create index on profile_photos(user_id, created_at);
+create index on profile_photos(active);
+create index on profile_photos(created_at);
 ```
 
 ## Features
