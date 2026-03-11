@@ -110,7 +110,7 @@ export default function Live() {
             <div style={{ position: "relative", paddingTop: "56.25%" }}>
               <video
                 ref={videoRef}
-                src="/src/assets/Live preview.mp4"
+                src="/Live preview.mp4"
                 title="Preview video"
                 style={{
                   position: "absolute",
